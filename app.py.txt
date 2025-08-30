@@ -1,0 +1,62 @@
+import streamlit as st
+import pandas as pd
+
+st.set_page_config(page_title="Modelo FEL", layout="wide")
+
+st.title("Modelo de Flujo de Efectivo Libre (FEL)")
+
+# --- Subir archivo ---
+archivo = st.file_uploader("Carga la base de datos (Excel)", type=["xlsx"])
+
+if archivo:
+    df = pd.read_excel(archivo, sheet_name=0)
+    df.set_index("Indicador", inplace=True)
+
+    # --- Extracción de variables ---
+    EBIT = df.loc["EBIT"]
+    Depreciacion = df.loc["Depreciación"]
+    CxC = df.loc["Cuentas por cobrar"]
+    Inventarios = df.loc["Inventarios"]
+    Proveedores = df.loc["Proveedores"]
+
+    # --- Cálculos ---
+    EBITDA = EBIT + Depreciacion
+    dCxC = CxC.diff().fillna(0)
+    dInv = Inventarios.diff().fillna(0)
+    dProv = Proveedores.diff().fillna(0)
+    VarCT = dCxC + dInv - dProv
+    FEL = EBITDA - VarCT
+
+    # --- Tabla final ---
+    resultado = pd.DataFrame({
+        "EBITDA": EBITDA,
+        "Δ CxC": dCxC,
+        "Δ Inventarios": dInv,
+        "Δ Proveedores": dProv,
+        "Variación CT": VarCT,
+        "FEL (antes CapEx e impuestos)": FEL
+    }).T
+
+    # --- Formato ---
+    resultado = resultado.round(1)
+
+    st.subheader("Resultado del Modelo FEL")
+    st.dataframe(resultado.style.format("{:,.1f}"), use_container_width=True)
+
+    # --- Descargar archivo Excel ---
+    def to_excel(df):
+        import io
+        from openpyxl import Workbook
+        output = io.BytesIO()
+        writer = pd.ExcelWriter(output, engine='openpyxl')
+        df.to_excel(writer, index=True, sheet_name='FEL')
+        writer.save()
+        output.seek(0)
+        return output
+
+    st.download_button(
+        label="📥 Descargar en Excel",
+        data=to_excel(resultado),
+        file_name="Modelo_FEL_Resultados.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
